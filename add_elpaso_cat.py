@@ -16,5 +16,5 @@ for i in igen:
     page.text = page.text += "[[Category:El Paso Daily Times]]"
     page.save(
         summary="Adding to [[:Category:El Paso Daily Times]]" +
-                " ([[Wikipedia:Bots/Requests for approval/" + self.brfa + "|BRFA]])", minor=True,
+                " ([[Commons:Bots/Requests/TheSandBot 3|BRFA]])", minor=True,
         botflag=True, force=True)
