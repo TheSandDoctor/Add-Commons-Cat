@@ -1,13 +1,26 @@
 import pywikibot
+from pywikibot.data.api import APIError
+from pywikibot.throttle import Throttle
 import re
 import mysql.connector
 import json
+import pickle
+from redis import Redis
 from datetime import date
+from common import REDIS_KEY
 
 site = pywikibot.Site('commons','commons')
-search_generator = site.search('"El Paso Daily Times. (El Paso, Tex.), Vol"')
-igen = iter(search_generator)
-counter = 0
+
+site._throttle = Throttle(site, multiplydelay=False)
+
+# Multi-workers are enough to cause problems, no need for internal
+# locking to cause even more problems
+site.lock_page = lambda *args, **kwargs: None  # noop
+site.unlock_page = lambda *args, **kwargs: None  # noop
+
+#search_generator = site.search('"El Paso Daily Times. (El Paso, Tex.), Vol"')
+#igen = iter(search_generator)
+#counter = 0
 mydb = mysql.connector.connect(
   host="localhost",
   user="newuser",
@@ -19,7 +32,16 @@ mycursor = mydb.cursor()
 search_sql = "SELECT title FROM runs WHERE title = '%s'"
 
 def main():
-    for page in igen:
+    redis = Redis(host="localhost")
+    while True:
+        _, picklemsg = redis.blpop(REDIS_KEY)
+        title = picklemsg.decode("utf-8")
+        page = pywikibot.Page(site, title) #this could be the issue as page title isnt clean
+        #print(page.title())
+        #print(str(title))
+        #print(type(title))
+
+    #for page in igen:
         mycursor.execute(search_sql, page.title())
         myresult = mycursor.fetchall()
         if len(myresult) > 0:
@@ -29,6 +51,7 @@ def main():
             text = page.text
             search_result = re.search("Category:El Paso Daily Times", text)
             if search_result:
+                print("Found in page")
                 add_to_db(page)
                 continue # already done, move on
         #if counter >4:
@@ -38,10 +61,13 @@ def main():
         if not call_home(site):
             raise ValueError("Kill switch on-wiki is false. Terminating program.")
         page.text = page.text + "\n[[Category:El Paso Daily Times]]"
+        print("Editing")
+        print(len(text))
+        print(len(page.text))
         page.save(
-            summary="Adding to [[:Category:El Paso Daily Times]]" +
-                    " ([[Commons:Bots/Requests/TheSandBot 3|BRFA]])", minor=True,
-            botflag=True, force=True)
+                summary="Adding to [[:Category:El Paso Daily Times]]" +
+                        " ([[Commons:Bots/Requests/TheSandBot 3|BRFA]])", minor=True,
+                botflag=True, force=True)
         #counter += 1
         add_to_db(page)
         #val = (str(page.title()), date.today())
